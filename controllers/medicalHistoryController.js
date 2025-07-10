@@ -64,15 +64,30 @@ exports.createMedicalHistory = catchAsync(async (req, res, next) => {
     }
   });
 });
-exports.updateMedicalHistory = catchAsync(async (req, res, next) => {
-  const medicalHistory = await MedicalHistory.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true
-  });
 
-  if (!medicalHistory) {
+exports.updateMedicalHistory = catchAsync(async (req, res, next) => {
+  // Get the existing medical history
+  const existingHistory = await MedicalHistory.findById(req.params.id);
+  
+  if (!existingHistory) {
     return next(new AppError('No medical history found with that ID', 404));
   }
+
+  // Prepare the update data
+  const updateData = {
+    ...req.body,
+    updatedAt: Date.now()
+  };
+
+  // Update the medical history
+  const medicalHistory = await MedicalHistory.findByIdAndUpdate(
+    req.params.id,
+    updateData,
+    {
+      new: true,
+      runValidators: true
+    }
+  );
 
   res.status(200).json({
     status: 'success',

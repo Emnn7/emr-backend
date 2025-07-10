@@ -29,6 +29,20 @@ const paymentSchema = new mongoose.Schema({
     enum: ['pending', 'completed', 'failed', 'refunded'],
     default: 'pending'
   },
+  // Add to paymentSchema
+paymentType: {
+  type: String,
+  enum: ['registration', 'procedure', 'lab-test', 'other'],
+  required: true
+},
+relatedEntity: {
+  type: mongoose.Schema.ObjectId,
+  refPath: 'relatedEntityModel'
+},
+relatedEntityModel: {
+  type: String,
+  enum: ['Patient', 'PatientProcedure', 'LabTest']
+},
   notes: {
     type: String,
     trim: true
@@ -40,13 +54,13 @@ const paymentSchema = new mongoose.Schema({
   }],
   receiptNumber: { 
     type: String,
-    unique: true,
-    required: true
+    unique: true
   },
   paymentDate: {
     type: Date,
     default: Date.now
   },
+  labOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'LabOrder' },
   discount: {
     type: Number,
     default: 0,
@@ -57,6 +71,10 @@ const paymentSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  relatedLabOrder: {
+  type: mongoose.Schema.ObjectId,
+  ref: 'LabOrder'
+},
   processedBy: {
     type: mongoose.Schema.ObjectId,
     refPath: 'processedByModel',
@@ -92,15 +110,42 @@ paymentSchema.pre(/^find/, function(next) {
 });
 
 // Virtual for total amount (sum of services minus discount plus tax)
-paymentSchema.virtual('totalAmount').get(function() {
-  return this.services.reduce((sum, service) => sum + service.amount, 0) - this.discount + this.taxAmount;
+paymentSchema.virtual('paymentTypeLabel').get(function() {
+  const types = {
+    'registration': 'Registration Fee',
+    'procedure': 'Medical Procedure',
+    'lab-test': 'Lab Test',
+    'other': 'Other Service'
+  };
+  return types[this.paymentType] || this.paymentType;
 });
-
 // Auto-generate unique receipt number if not provided
 paymentSchema.pre('save', async function(next) {
   if (!this.receiptNumber) {
     const count = await this.constructor.countDocuments();
     this.receiptNumber = `REC-${Date.now()}-${count + 1}`;
+  }
+  next();
+});
+paymentSchema.pre('save', function(next) {
+  if (this.paymentType === 'registration' && !this.relatedEntity) {
+    this.relatedEntity = this.patient;
+    this.relatedEntityModel = 'Patient';
+  }
+  next();
+});
+// Add payment confirmation number
+paymentSchema.add({
+  confirmationNumber: {
+    type: String,
+    unique: true
+  }
+});
+
+// Add pre-save hook for confirmation number
+paymentSchema.pre('save', function(next) {
+  if (!this.confirmationNumber) {
+    this.confirmationNumber = `CONF-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
   }
   next();
 });

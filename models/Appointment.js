@@ -52,7 +52,7 @@ appointmentSchema.pre('save', function(next) {
 appointmentSchema.pre(/^find/, function(next) {
   this.populate({
     path: 'patient',
-    select: 'firstName lastName phone'
+    select: 'firstName lastName phone patientCardNumber'
   }).populate({
     path: 'doctor',
     select: 'firstName lastName specialization'

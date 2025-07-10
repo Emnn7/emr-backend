@@ -11,28 +11,43 @@ const labReportSchema = new mongoose.Schema({
     ref: 'LabOrder',
     required: [true, 'Lab report must belong to a lab order']
   },
-  testName: {
+  tests: [{
+    testId: {
+      type: mongoose.Schema.ObjectId,
+      required: true
+    },
+    name: {
+      type: String,
+      required: [true, 'Please provide test name']
+    },
+    code: {
+      type: String,
+      required: [true, 'Please provide test code']
+    },
+    result: {
+      type: String,
+      required: [true, 'Please provide test result']
+    },
+    unit: {
+      type: String
+    },
+    normalRange: {
+      type: String
+    },
+    abnormalFlag: {
+      type: String,
+      enum: ['high', 'low', 'normal', 'critical'],
+      default: 'normal'
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'completed', 'cancelled'],
+      default: 'completed'
+    }
+  }],
+  findings: {
     type: String,
-    required: [true, 'Please provide test name']
-  },
-  testCode: {
-    type: String,
-    required: [true, 'Please provide test code']
-  },
-  result: {
-    type: String,
-    required: [true, 'Please provide test result']
-  },
-  unit: {
-    type: String
-  },
-  normalRange: {
-    type: String
-  },
-  abnormalFlag: {
-    type: String,
-    enum: ['high', 'low', 'normal', 'critical'],
-    default: 'normal'
+    trim: true
   },
   notes: {
     type: String,
@@ -40,17 +55,26 @@ const labReportSchema = new mongoose.Schema({
   },
   performedBy: {
     type: mongoose.Schema.ObjectId,
-    ref: 'LabAssistant',
-    required: [true, 'Please provide lab assistant ID']
+    required: true,
+    refPath: 'performedByModel' // Dynamic reference
+  },
+  performedByModel: {
+    type: String,
+    required: true,
+    enum: ['Doctor', 'LabAssistant', 'Admin'] // Your actual models
   },
   verifiedBy: {
     type: mongoose.Schema.ObjectId,
-    ref: 'Doctor'
+    refPath: 'verifiedByModel' // Dynamic reference
+  },
+  verifiedByModel: {
+    type: String,
+    enum: ['Doctor', 'Admin'] // Only doctors/admins can verify
   },
   status: {
     type: String,
     enum: ['pending', 'completed', 'verified', 'cancelled'],
-    default: 'pending'
+    default: 'completed'
   },
   createdAt: {
     type: Date,
@@ -59,30 +83,10 @@ const labReportSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  },
-   isExternal: {
-    type: Boolean,
-    default: false
-  },
-  externalLab: {
-    name: String,
-    accreditation: String,
-    contact: {
-      phone: String,
-      email: String
-    },
-    reportDate: Date
-  },
-  methodology: String,
-  qualityControl: {
-    performed: Boolean,
-    results: String
-  },
-  attachments: [{
-    name: String,
-    url: String,
-    uploadedAt: Date
-  }],
+  }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
 labReportSchema.pre('save', function(next) {
@@ -96,13 +100,15 @@ labReportSchema.pre(/^find/, function(next) {
     select: 'firstName lastName phone'
   }).populate({
     path: 'labOrder',
-    select: 'tests status'
+    select: 'tests status priority'
   }).populate({
     path: 'performedBy',
-    select: 'firstName lastName'
+    select: 'firstName lastName',
+    options: { model: this.performedByModel }
   }).populate({
     path: 'verifiedBy',
-    select: 'firstName lastName'
+    select: 'firstName lastName',
+    options: { model: this.verifiedByModel }
   });
   next();
 });

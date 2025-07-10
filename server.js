@@ -56,9 +56,22 @@ app.use(hpp());
 // Compression
 app.use(compression());
 
+// Add this before your static file middleware
+app.use((req, res, next) => {
+  if (req.url.endsWith('.avif')) {
+    res.set('Content-Type', 'image/avif');
+  }
+  next();
+});
 // Static files
-app.use(express.static(path.join(__dirname, 'public')));
-
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Access-Control-Expose-Headers', 'Content-Length');
+    res.set('Content-Type', 'image/*'); // Add proper content type
+  }
+}));
 // Request logger
 app.use((req, res, next) => {
   console.log('Incoming request:', req.method, req.originalUrl);
@@ -90,6 +103,9 @@ const medicalHistoryRoutes = require('./routes/medicalHistoryRoutes');
 const consultationRoutes = require('./routes/consultationRoutes');
 const labTestCatalogRoutes = require('./routes/labTestCatalogRoutes');
 const procedureCodeRoutes = require('./routes/procedureCodeRoutes')
+const patientProcedureRoutes = require('./routes/patientProcedureRoutes')
+const diagnosticRoutes = require('./routes/diagnosticRoutes');
+const labPaymentRoutes = require('./routes/labPaymentRoutes');
 
 
 
@@ -114,6 +130,11 @@ app.use('/api/medicalHistory', medicalHistoryRoutes);
 app.use('/api/consultations', consultationRoutes);
 app.use('/api/lab-tests/catalog', labTestCatalogRoutes);
 app.use('/api/procedure-codes', procedureCodeRoutes);
+app.use('/api/patient-procedures', patientProcedureRoutes);
+app.use('/api/diagnostics', diagnosticRoutes);
+app.use('/api/lab-payments', labPaymentRoutes);
+
+
 // Handle unhandled routes
 const AppError = require('./utils/appError');
 app.all('*', (req, res, next) => {

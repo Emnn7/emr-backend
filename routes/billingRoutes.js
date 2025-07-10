@@ -17,6 +17,16 @@ router
     billingController.createBilling
   );
 
+  router.get('/unpaid', 
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  billingController.getUnpaidBills
+);
+
+router.patch('/:id/status',
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  billingController.updateBillingStatus
+);
+
 router
   .route('/:id')
   .get(billingController.getBilling)
@@ -43,5 +53,11 @@ router
     authMiddleware.restrictTo('admin', 'receptionist'),
     billingController.getBillingsByStatus
   );
+
+router.post(
+  '/patient/:patientId/registration',
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  billingController.createRegistrationBilling
+);
 
 module.exports = router;

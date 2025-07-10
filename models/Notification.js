@@ -9,7 +9,7 @@ const notificationSchema = new mongoose.Schema({
   recipientModel: {
     type: String,
     required: true,
-    enum: ['Doctor', 'LabAssistant', 'Admin', 'Patient']
+    enum: ['Doctor', 'LabAssistant', 'Admin', 'Receptionist']
   },
   sender: {
     type: mongoose.Schema.Types.ObjectId,
@@ -19,12 +19,12 @@ const notificationSchema = new mongoose.Schema({
   senderModel: {
     type: String,
     required: true,
-    enum: ['Doctor', 'LabAssistant', 'Admin', 'Patient']
+    enum: ['Doctor', 'LabAssistant', 'Admin', 'Receptionist']
   },
   type: {
     type: String,
     required: true,
-    enum: ['new-lab-order', 'report-verification', 'system-alert']
+    enum: ['new-lab-order', 'report-verification', 'system-alert', 'lab-order-paid']
   },
   message: {
     type: String,

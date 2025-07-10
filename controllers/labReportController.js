@@ -2,6 +2,8 @@ const LabReport = require('../models/LabReport');
 const LabOrder = require('../models/LabOrder');
 const Patient = require('../models/Patient');
 const Doctor = require('../models/Doctor');
+const LabAssistant = require('../models/LabAssistant');
+const Admin = require('../models/Admin');
 const AppError = require('../utils/appError');
 const catchAsync = require('../utils/catchAsync');
 const { ROLES, checkPermission } = require('../config/roles');
@@ -58,25 +60,29 @@ exports.getAllLabReports = catchAsync(async (req, res, next) => {
 exports.getLabReport = catchAsync(async (req, res, next) => {
   const labReport = await LabReport.findById(req.params.id)
     .populate('patient', 'firstName lastName phone')
-    .populate('performedBy', 'firstName lastName')
-    .populate('verifiedBy', 'firstName lastName')
-    .populate({
-      path: 'labOrder',
-      populate: {
-        path: 'doctor',
-        select: 'firstName lastName specialization'
-      }
-    });
+  .populate({
+  path: 'labOrder',
+  populate: [
+    {
+      path: 'doctor',
+      select: 'firstName lastName specialization'
+    },
+    {
+      path: 'patient',
+      select: 'firstName lastName phone'
+    }
+  ]
+})
 
   if (!labReport) {
     return next(new AppError('No lab report found with that ID', 404));
   }
 
   // Check permissions
-  if (
-    req.user.role !== ROLES.ADMIN &&
-    req.user.role !== ROLES.LAB_ASSISTANT &&
-    labReport.labOrder.doctor._id.toString() !== req.user._id.toString()
+ if (
+  req.user.role !== ROLES.ADMIN &&
+  req.user.role !== ROLES.LAB_ASSISTANT &&
+  (!labReport.labOrder || labReport.labOrder.doctor._id.toString() !== req.user._id.toString())
   ) {
     return next(
       new AppError('You are not authorized to view this lab report', 403)
@@ -97,6 +103,9 @@ exports.getLabReport = catchAsync(async (req, res, next) => {
 exports.createLabReport = catchAsync(async (req, res, next) => {
   // Check if lab order exists
   const labOrder = await LabOrder.findById(req.body.labOrder);
+    if (labOrder.status !== 'paid') {
+    return next(new AppError('Payment is required before processing lab tests', 402));
+  }
   if (!labOrder) {
     return next(new AppError('No lab order found with that ID', 404));
   }
@@ -110,27 +119,45 @@ exports.createLabReport = catchAsync(async (req, res, next) => {
   // Set the performedBy to the current user if lab assistant
   if (req.user.role === ROLES.LAB_ASSISTANT) {
     req.body.performedBy = req.user._id;
+    req.body.performedByModel = capitalizeFirstLetter(req.user.role);
   }
 
-    // Process test results
-  req.body.tests = req.body.tests.map(test => ({
-    testId: test.testId,
-    name: test.name,
-    result: test.result,
-    unit: test.unit,
-    normalRange: test.normalRange,
-    abnormalFlag: test.abnormalFlag
-  }));
-  const newLabReport = await LabReport.create(req.body);
-
-  // Update lab order status if all tests are completed
-  const pendingTests = labOrder.tests.filter(
-    test => test.status !== 'completed'
-  ).length;
-  if (pendingTests === 0) {
-    labOrder.status = 'completed';
-    await labOrder.save();
+  // Validate tests array
+  if (!req.body.tests || req.body.tests.length === 0) {
+    return next(new AppError('Please provide at least one test result', 400));
   }
+console.log('Creating report with data:', req.body);
+   const newLabReport = await LabReport.create(req.body);
+  console.log('New report created:', newLabReport);
+
+console.log('Updating lab order:', req.body.labOrder);
+const updatedOrder = await LabOrder.findByIdAndUpdate(req.body.labOrder, { 
+  report: newLabReport._id,
+  status: 'completed' 
+}, { new: true }).populate('report');
+console.log('Updated order:', updatedOrder);
+
+
+console.log('Lab order before update:', labOrder);
+labOrder.report = newLabReport._id;
+await labOrder.save();
+console.log('Lab order after update:', labOrder);
+  // Populate the report before sending response
+   const populatedReport = await LabReport.findById(newLabReport._id)
+    .populate('patient')
+    .populate('labOrder')
+    .populate({
+      path: 'performedBy',
+      select: 'firstName lastName',
+      options: { model: req.body.performedByModel }
+    });
+
+   
+
+  // Update lab order status
+    labOrder.report = newLabReport._id;
+  labOrder.status = 'completed';
+  await labOrder.save();
 
   // Log the action
   await AuditLog.create({
@@ -146,7 +173,7 @@ exports.createLabReport = catchAsync(async (req, res, next) => {
   res.status(201).json({
     status: 'success',
     data: {
-      labReport: newLabReport
+      labReport: populatedReport 
     }
   });
 });
@@ -295,8 +322,8 @@ exports.deleteLabReport = catchAsync(async (req, res, next) => {
 // @route   GET /api/v1/lab-reports/:id/pdf
 // @access  Private/Doctor, LabAssistant, Admin
 exports.generateLabReportPDF = catchAsync(async (req, res, next) => {
-  const labReport = await LabReport.findById(req.params.id)
-    .populate('patient', 'firstName lastName phone dateOfBirth gender')
+    const labReport = await LabReport.findById(req.params.id)
+    .populate('patient', 'firstName lastName gender dateOfBirth phone')
     .populate('performedBy', 'firstName lastName')
     .populate('verifiedBy', 'firstName lastName')
     .populate({
@@ -306,6 +333,8 @@ exports.generateLabReportPDF = catchAsync(async (req, res, next) => {
         select: 'firstName lastName specialization'
       }
     });
+    console.log('Patient:', labReport.patient);
+
 
   if (!labReport) {
     return next(new AppError('No lab report found with that ID', 404));
@@ -374,11 +403,9 @@ exports.getLabReportsByPatient = catchAsync(async (req, res, next) => {
       : labReports;
 
   res.status(200).json({
-    status: 'success',
+   status: 'success',
     results: filteredReports.length,
-    data: {
-      labReports: filteredReports
-    }
+    data: filteredReports
   });
 });
 

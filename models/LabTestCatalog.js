@@ -23,6 +23,11 @@ const labTestCatalogSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+   price: {
+    type: Number,
+    required: [true, 'Test price is required'],
+    min: 0
+  },
   isActive: {
     type: Boolean,
     default: true

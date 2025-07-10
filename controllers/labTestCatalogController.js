@@ -4,7 +4,7 @@ const catchAsync = require('../utils/catchAsync');
 
 // Create a new catalog test
 exports.createCatalogTest = catchAsync(async (req, res, next) => {
-  const { name, code, category, description, isActive } = req.body;
+  const { name, code, category, description, price, isActive } = req.body;
 
   if (!name || !code || !category) {
     return next(new AppError('Name, code, and category are required', 400));
@@ -20,6 +20,7 @@ exports.createCatalogTest = catchAsync(async (req, res, next) => {
     code,
     category,
     description,
+    price,
     isActive
   });
 

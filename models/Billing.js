@@ -72,7 +72,16 @@ const billingSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
-  }
+  },
+  paymentType: {
+  type: String,
+  enum: ['registration', 'procedure', 'lab-test', 'other'],
+  required: true
+},
+relatedLabOrder: {
+  type: mongoose.Schema.ObjectId,
+  ref: 'LabOrder'
+}
 });
 
 billingSchema.pre('save', function(next) {
@@ -83,7 +92,7 @@ billingSchema.pre('save', function(next) {
 billingSchema.pre(/^find/, function(next) {
   this.populate({
     path: 'patient',
-    select: 'firstName lastName phone'
+    select: 'firstName lastName phone patientCardNumber' // Added patientCardNumber
   }).populate({
     path: 'appointment',
     select: 'date time'

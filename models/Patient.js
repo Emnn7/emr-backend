@@ -2,6 +2,29 @@ const mongoose = require('mongoose');
 const validator = require('validator');
 
 const patientSchema = new mongoose.Schema({
+// In Patient.js model
+patientCardNumber: {
+  type: String,
+  unique: true,
+  required: true,
+  trim: true,
+  default: function() {
+    // Generate a consistent format like PC-000001
+    const num = Math.floor(100000 + Math.random() * 900000); // 6-digit number
+    return `PC-${num.toString().padStart(6, '0')}`;
+  }
+},
+patientId: {
+  type: String,
+  unique: true,
+  required: true,
+  trim: true,
+  default: function() {
+    // Generate a simple internal ID
+    return Date.now().toString(); // Or use mongoose's default _id
+  },
+  select: false // Hide from queries unless explicitly requested
+},
   firstName: {
     type: String,
     required: [true, 'Please provide your first name'],
@@ -21,6 +44,23 @@ const patientSchema = new mongoose.Schema({
     enum: ['male', 'female', 'other'],
     required: [true, 'Please provide your gender']
   },
+status: {
+  type: String,
+  enum: ['pending', 'active', 'inactive'],
+  default: 'pending'
+},
+paymentStatus: {
+  type: String,
+  enum: ['pending', 'paid', 'unpaid'],
+  default: 'pending'
+},
+registrationDate: {
+  type: Date
+},
+registrationExpiresAt: {
+  type: Date,
+  default: () => new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
+},
   address: {
     type: String,
     required: [true, 'Please provide your address'],
@@ -52,11 +92,6 @@ const patientSchema = new mongoose.Schema({
       message: 'Please provide a valid phone number (e.g., +1234567890 or 1234567890)'
     }
   },
-  email: {
-    type: String,
-    lowercase: true,
-    validate: [validator.isEmail, 'Please provide a valid email']
-  },
   emergencyContact: {
     name: {
       type: String,
@@ -77,11 +112,12 @@ const patientSchema = new mongoose.Schema({
       }
     }
   },
-  bloodGroup: {
-    type: String,
-    enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown'],
-    default: 'unknown'
-  },
+  bloodType: {
+  type: String,
+  enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'],
+  default: 'Unknown',
+  trim: true
+},
   allergies: [
     {
       name: {
@@ -178,6 +214,8 @@ patientSchema.pre('save', function(next) {
   next();
 });
 
+
+
 patientSchema.virtual('fullName').get(function() {
   return `${this.firstName} ${this.lastName}`;
 });
@@ -191,3 +229,16 @@ patientSchema.index({ firstName: 'text', lastName: 'text', phone: 'text' });
 const Patient = mongoose.model('Patient', patientSchema);
 
 module.exports = Patient;
+
+
+
+
+
+
+
+
+
+
+
+
+

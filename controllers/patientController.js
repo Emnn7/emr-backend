@@ -23,39 +23,54 @@ const capitalizeFirstLetter = (string) => {
 exports.getAllPatients = catchAsync(async (req, res, next) => {
   let query;
 
-  // Filter based on user role
+  // For doctors, get patients with appointments
   if (req.user.role === ROLES.DOCTOR) {
-    // Get patients who have appointments with this doctor
     const doctorAppointments = await Appointment.find({
-      doctor: req.user._id
+      doctor: req.user._id,
+      status: { $ne: 'cancelled' } // Exclude cancelled appointments
     }).distinct('patient');
+    
     query = Patient.find({ _id: { $in: doctorAppointments } });
   } else {
-    query = Patient.find();
+    // For others, only get paid patients
+    query = Patient.find({ paymentStatus: 'paid' });
   }
 
-  const patients = await query.select('-__v').sort('lastName firstName');
+  const patients = await query
+    .select('_id firstName lastName phone patientCardNumber dateOfBirth paymentStatus createdAt')
+    .sort('lastName firstName')
+    .lean(); // Convert to plain JS objects
 
   res.status(200).json({
     status: 'success',
     results: patients.length,
-    data: {
-      patients
-    }
+    data: patients // Direct array of patients
   });
 });
 
+// @desc    Get recent patients
+// @route   GET /api/v1/patients/recent
+// @access  Private/Admin, Receptionist, Doctor
+exports.getRecentPatients = catchAsync(async (req, res, next) => {
+  let query = Patient.find();
 
-// Get recent patients (e.g., last 5 added)
-exports.getRecentPatients = async (req, res) => {
-  try {
-    const patients = await Patient.find().sort({ createdAt: -1 }).limit(5);
-    res.status(200).json({ status: 'success', data: patients });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+  // For non-doctors, only show paid patients
+  if (req.user.role !== ROLES.DOCTOR) {
+    query = query.where('paymentStatus').equals('paid');
   }
-};
 
+  const patients = await query
+    .select('_id firstName lastName phone patientCardNumber createdAt')
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .lean();
+
+  res.status(200).json({
+    status: 'success',
+    results: patients.length,
+    data: patients // Direct array of patients
+  });
+});
 
 // @desc    Search patients by phone number
 // @route   GET /api/v1/patients/search
@@ -73,6 +88,16 @@ exports.searchPatients = catchAsync(async (req, res, next) => {
   // Normalize phone number (remove +, 0, spaces)
   const normalizedPhone = searchTerm.replace(/^\+|^0|\s/g, '');
   
+  // Base query conditions
+  const searchConditions = {
+    $or: [
+      { phone: { $regex: normalizedPhone, $options: 'i' } },
+      { firstName: searchRegex },
+      { lastName: searchRegex },
+      { patientCardNumber: searchRegex } // Search by card number too
+    ]
+  };
+
   // Filter based on user role
   if (req.user.role === ROLES.DOCTOR) {
     const doctorAppointments = await Appointment.find({
@@ -81,25 +106,17 @@ exports.searchPatients = catchAsync(async (req, res, next) => {
     
     query = Patient.find({
       _id: { $in: doctorAppointments },
-      $or: [
-        { phone: { $regex: normalizedPhone, $options: 'i' } },
-        { firstName: searchRegex },
-        { lastName: searchRegex },
-        { patientId: searchRegex }
-      ]
+      ...searchConditions
     });
   } else {
+    // For non-doctors, only search paid patients
     query = Patient.find({
-      $or: [
-        { phone: { $regex: normalizedPhone, $options: 'i' } },
-        { firstName: searchRegex },
-        { lastName: searchRegex },
-        { patientId: searchRegex }
-      ]
+      paymentStatus: 'paid',
+      ...searchConditions
     });
   }
 
-  const patients = await query.select('_id firstName lastName phone dateOfBirth patientId');
+  const patients = await query.select('_id firstName lastName phone dateOfBirth patientCardNumber');
 
   res.status(200).json({
     status: 'success',
@@ -118,7 +135,8 @@ exports.getPatient = catchAsync(async (req, res, next) => {
     return next(new AppError('Patient ID is required', 400));
   }
 
-  const patient = await Patient.findById(req.params.id).select('-__v');
+  const patient = await Patient.findById(req.params.id).
+  select('-__v');
 
   if (!patient) {
     return next(new AppError('No patient found with that ID', 404));
@@ -159,18 +177,23 @@ exports.getPatient = catchAsync(async (req, res, next) => {
 // @desc    Create a new patient
 // @route   POST /api/v1/patients
 // @access  Private/Admin, Receptionist
+const generatePatientCardNumber = require('../utils/cardNumberGenerator');
+
 exports.createPatient = catchAsync(async (req, res, next) => {
-  // Check if phone number already exists
+  // 1. Generate card number
+  req.body.patientCardNumber = `PC-${Math.floor(100000 + Math.random() * 900000).toString().padStart(6, '0')}`;
+  req.body.paymentStatus = 'pending'; // Set initial status
+  
+  // 2. Check for existing phone
   const existingPatient = await Patient.findOne({ phone: req.body.phone });
   if (existingPatient) {
-    return next(
-      new AppError('A patient with that phone number already exists', 400)
-    );
+    return next(new AppError('A patient with that phone number already exists', 400));
   }
 
+  // 3. Create patient
   const newPatient = await Patient.create(req.body);
 
-  // Log the action
+  // 4. Log and respond
   await AuditLog.create({
     action: 'create',
     entity: 'patient',
@@ -185,6 +208,25 @@ exports.createPatient = catchAsync(async (req, res, next) => {
     status: 'success',
     data: {
       patient: newPatient
+    }
+  });
+});
+
+exports.updatePaymentStatus = catchAsync(async (req, res, next) => {
+  const patient = await Patient.findByIdAndUpdate(
+    req.params.id,
+    { paymentStatus: 'paid' },
+    { new: true }
+  );
+
+  if (!patient) {
+    return next(new AppError('No patient found with that ID', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      patient
     }
   });
 });

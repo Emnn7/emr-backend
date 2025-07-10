@@ -26,7 +26,7 @@ exports.getAllAppointments = catchAsync(async (req, res, next) => {
   } else {
     query = Appointment.find();
   }
-const appointments = await query.sort('-date -time').populate('patient', 'firstName lastName');
+const appointments = await query.sort('-date -time').populate('patient', 'firstName lastName patientCardNumber');
 
   res.status(200).json({
     status: 'success',
@@ -64,7 +64,7 @@ exports.getTodayAppointments = async (req, res) => {
 // @access  Private
 exports.getAppointment = catchAsync(async (req, res, next) => {
  const appointment = await Appointment.findById(req.params.id)
-    .populate('patient', 'firstName lastName')
+    .populate('patient', 'firstName lastName patientCardNumber')
     .populate('doctor', 'firstName lastName');
   if (!appointment) {
     return next(new AppError('No appointment found with that ID', 404));

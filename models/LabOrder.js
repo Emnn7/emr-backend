@@ -15,6 +15,18 @@ const labOrderSchema = new mongoose.Schema({
     type: mongoose.Schema.ObjectId,
     ref: 'Appointment'
   },
+  report: {
+  type: mongoose.Schema.ObjectId,
+  ref: 'LabReport'
+},
+status: {
+  type: String,
+  enum: ['pending-payment', 'paid', 'in-progress', 'completed', 'cancelled'],
+  default: 'pending-payment'
+},
+paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
+paymentVerified: { type: Boolean, default: false },
+payment: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },
   tests: [
     {
       name: {
@@ -29,10 +41,15 @@ const labOrderSchema = new mongoose.Schema({
         type: String,
         trim: true
       },
+       price: {
+        type: Number,
+        required: true,
+        min: 0
+      },
       status: {
         type: String,
-        enum: ['ordered', 'in-progress', 'completed', 'cancelled'],
-        default: 'ordered'
+        enum: ['pending', 'pending-payment', 'paid', 'in-progress', 'completed', 'cancelled'],
+  default: 'pending'
       }
     }
   ],
@@ -40,11 +57,10 @@ const labOrderSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  status: {
-    type: String,
-    enum: ['pending', 'completed', 'cancelled'],
-    default: 'pending'
-  },
+billing: {
+  type: mongoose.Schema.ObjectId,
+  ref: 'Billing'
+},
   createdAt: {
     type: Date,
     default: Date.now
@@ -83,11 +99,17 @@ labOrderSchema.pre('save', function(next) {
 labOrderSchema.pre(/^find/, function(next) {
   this.populate({
     path: 'patient',
-    select: 'firstName lastName phone'
+    select: 'firstName lastName phone patientCardNumber' // Added patientCardNumber
   }).populate({
     path: 'doctor',
     select: 'firstName lastName specialization'
   });
+  next();
+});
+labOrderSchema.pre('save', function(next) {
+  if (this.tests && this.tests.some(test => !test.price)) {
+    throw new Error('All tests must have a price');
+  }
   next();
 });
 

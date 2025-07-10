@@ -9,7 +9,10 @@ exports.getAllProcedureCodes = catchAsync(async (req, res, next) => {
     status: 'success',
     results: procedureCodes.length,
     data: {
-      procedureCodes
+      procedureCodes: procedureCodes.map(code => ({
+        ...code._doc,
+        price: Number(code.price.toFixed(2)) // Ensure proper number format
+      }))
     }
   });
 });

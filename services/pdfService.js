@@ -8,10 +8,72 @@ exports.generateInvoice = async (billing) => {
     const fileName = `invoice-${billing._id}-${Date.now()}.pdf`;
     const filePath = path.join(__dirname, `../public/reports/${fileName}`);
 
-    // Ensure directory exists
-    if (!fs.existsSync(path.dirname(filePath))) {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+   // Create directory if it doesn't exist
+const ensureDirectoryExists = (filePath) => {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+};
+
+// Unified receipt generator
+exports.generateReceipt = async (data) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50 });
+      const fileName = `receipt-${data.receiptNumber}.pdf`;
+      const filePath = path.join(__dirname, '../public/receipts', fileName);
+      
+      ensureDirectoryExists(filePath);
+
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      // Header
+      doc.fontSize(20).text('Receipt', { align: 'center' });
+      doc.moveDown();
+
+      // Patient info
+      doc.fontSize(14)
+        .text(`Patient: ${data.patient.name}`)
+        .text(`Date: ${new Date(data.date).toLocaleDateString()}`)
+        .text(`Receipt #: ${data.receiptNumber}`);
+      doc.moveDown();
+
+      // Services table
+      doc.fontSize(12).text('Services:', { underline: true });
+      doc.moveDown(0.5);
+      
+      let yPos = doc.y;
+      doc.font('Helvetica-Bold');
+      doc.text('Description', 50, yPos);
+      doc.text('Amount', 400, yPos, { width: 100, align: 'right' });
+      doc.font('Helvetica');
+      
+      data.services.forEach(service => {
+        yPos += 20;
+        doc.text(service.description, 50, yPos);
+        doc.text(`$${service.amount.toFixed(2)}`, 400, yPos, { width: 100, align: 'right' });
+      });
+      
+      // Total
+      yPos += 30;
+      doc.font('Helvetica-Bold');
+      doc.text('Total:', 350, yPos);
+      doc.text(`$${data.total.toFixed(2)}`, 400, yPos, { width: 100, align: 'right' });
+
+      doc.end();
+
+      stream.on('finish', () => resolve(filePath));
+      stream.on('error', reject);
+
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      reject(err);
     }
+  });
+};
+    
 
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
@@ -155,7 +217,9 @@ exports.generatePrescription = async (prescription) => {
       .text(`Name: ${prescription.patient.firstName} ${prescription.patient.lastName}`)
       .text(`Gender: ${prescription.patient.gender}`)
   .text(`Date of Birth: ${prescription.patient.dateOfBirth ? prescription.patient.dateOfBirth.toDateString() : 'N/A'}`)
+  
   .moveDown();
+  
 
     // Prescription Info
     doc
@@ -277,50 +341,58 @@ exports.generateLabReport = async (labReport) => {
       .moveDown(0.5)
       .fontSize(12)
       .text(`Name: ${labReport.patient.firstName} ${labReport.patient.lastName}`)
-      .text(`Gender: ${labReport.patient.gender}`)
-      .text(`Date of Birth: ${labReport.patient.dateOfBirth.toDateString()}`)
+      .text(`Phone: ${labReport.patient?.phone || 'Not specified'}`)
       .moveDown();
 
     // Report Info
+doc
+  .fontSize(14)
+  .text('Test Details:', { underline: true })
+  .moveDown(0.5)
+  .fontSize(12)
+  .text(`Report ID: ${labReport._id}`)
+  .text(`Date Collected: ${labReport.createdAt.toLocaleDateString()}`)
+  .text(`Performed By: ${labReport.performedBy.firstName} ${labReport.performedBy.lastName}`);
+
+if (labReport.verifiedBy) {
+  doc.text(`Verified By: ${labReport.verifiedBy.firstName} ${labReport.verifiedBy.lastName}`);
+}
+
+doc.text(`Status: ${labReport.status}`)
+  .moveDown();
+
+// Results section - handle multiple tests
+doc
+  .fontSize(14)
+  .text('Test Results:', { underline: true })
+  .moveDown(0.5);
+
+if (labReport.tests && labReport.tests.length > 0) {
+  labReport.tests.forEach((test, index) => {
     doc
-      .fontSize(14)
-      .text('Test Details:', { underline: true })
-      .moveDown(0.5)
       .fontSize(12)
-      .text(`Report ID: ${labReport._id}`)
-      .text(`Test Name: ${labReport.testName}`)
-      .text(`Test Code: ${labReport.testCode}`)
-      .text(`Date Collected: ${labReport.createdAt.toLocaleDateString()}`)
-      .text(`Performed By: ${labReport.performedBy.firstName} ${labReport.performedBy.lastName}`);
-
-    if (labReport.verifiedBy) {
-      doc.text(`Verified By: ${labReport.verifiedBy.firstName} ${labReport.verifiedBy.lastName}`);
+      .text(`Test ${index + 1}: ${test.name || 'N/A'}`, { indent: 10 })
+      .text(`Result: ${test.result || 'N/A'}`, { indent: 10 });
+    
+    if (test.unit) {
+      doc.text(`Unit: ${test.unit}`, { indent: 10 });
     }
-
-    doc.text(`Status: ${labReport.status}`)
-      .moveDown();
-
-    // Results
-    doc
-      .fontSize(14)
-      .text('Test Results:', { underline: true })
-      .moveDown(0.5)
-      .fontSize(12)
-      .text(`Result: ${labReport.result}`);
-
-    if (labReport.unit) {
-      doc.text(`Unit: ${labReport.unit}`);
+    
+    if (test.normalRange) {
+      doc.text(`Normal Range: ${test.normalRange}`, { indent: 10 });
     }
-
-    if (labReport.normalRange) {
-      doc.text(`Normal Range: ${labReport.normalRange}`);
+    
+    if (test.abnormalFlag) {
+      doc.text(`Flag: ${test.abnormalFlag}`, { indent: 10 });
     }
-
-    if (labReport.abnormalFlag) {
-      doc.text(`Flag: ${labReport.abnormalFlag}`);
-    }
-
+    
     doc.moveDown();
+  });
+} else {
+  doc
+    .fontSize(12)
+    .text('No test results available', { indent: 10 });
+}
 
     // Notes
     if (labReport.notes) {

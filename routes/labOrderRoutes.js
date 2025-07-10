@@ -6,38 +6,52 @@ const authMiddleware = require('../middlewares/authMiddleware');
 // Protect all routes after this middleware
 router.use(authMiddleware.protect);
 
-// Routes for all lab orders
-router
-  .route('/')
-  .get(
-    authMiddleware.restrictTo('admin', 'doctor', 'labAssistant'),
-    labOrderController.getAllLabOrders
-  )
- router.route('/doctor/patients/:patientId/new')
-  .post(
-    authMiddleware.restrictTo('admin', 'doctor'),
-    labOrderController.createLabOrder
-  );
-  // Route to get lab orders by status with optional limit
+// Get all lab orders
+router.get(
+  '/',
+  authMiddleware.restrictTo('admin', 'doctor', 'labAssistant', 'receptionist'),
+  labOrderController.getAllLabOrders
+);
+
+// Create a lab order for a specific patient
+router.post(
+  '/',
+  authMiddleware.restrictTo('admin', 'doctor'),
+  labOrderController.createLabOrder
+);
+
+// Get lab orders by status
 router.get(
   '/status/:status',
-  authMiddleware.restrictTo('admin', 'doctor', 'labAssistant'),
+  authMiddleware.restrictTo('admin', 'doctor', 'labAssistant', 'receptionist'),
   labOrderController.getLabOrdersByStatus
 );
 
-// Route to update lab order status
+// Get pending payment lab orders
+router.get(
+  '/pending-payment',
+  authMiddleware.restrictTo('receptionist', 'admin', 'labAssistant'),
+  labOrderController.getPendingPaymentOrders
+);
+
+router.get(
+  '/paid',
+  authMiddleware.restrictTo('admin', 'labAssistant'),
+  labOrderController.getPaidLabOrders
+);
+
+// Update lab order status
 router.patch(
   '/:id/status',
   authMiddleware.restrictTo('admin', 'labAssistant'),
   labOrderController.updateLabOrderStatus
 );
-  
 
-// Route for a single lab order by ID
+// CRUD operations on individual lab orders
 router
   .route('/:id')
   .get(
-    authMiddleware.restrictTo('admin', 'doctor', 'labAssistant'),
+    authMiddleware.restrictTo('admin', 'doctor', 'labAssistant', 'receptionist'),
     labOrderController.getLabOrder
   )
   .patch(
@@ -49,25 +63,32 @@ router
     labOrderController.deleteLabOrder
   );
 
-// Route to get lab orders by doctor ID
+// Get lab orders by doctor ID
 router.get(
   '/doctor/:doctorId',
   authMiddleware.restrictTo('admin', 'doctor', 'labAssistant'),
   labOrderController.getLabOrdersByDoctor
 );
 
-// Route to get lab orders by patient ID
+// Get lab orders by patient ID
 router.get(
   '/patient/:patientId',
-  authMiddleware.restrictTo('admin', 'doctor', 'labAssistant'),
+   authMiddleware.restrictTo('admin', 'doctor', 'labAssistant', 'receptionist'),
   labOrderController.getLabOrdersByPatient
 );
 
-// Route to get lab orders by status
-router.get(
-  '/status/:status',
-  authMiddleware.restrictTo('admin', 'doctor', 'labAssistant'),
-  labOrderController.getLabOrdersByStatus
+// Update payment status
+router.patch(
+  '/:id/payment-status',
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  labOrderController.updatePaymentStatus
 );
+
+router.post(
+  '/:id/create-billing',
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  labOrderController.createLabOrderBilling
+);
+
 
 module.exports = router;

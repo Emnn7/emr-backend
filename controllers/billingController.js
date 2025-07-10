@@ -27,7 +27,13 @@ exports.getAllBillings = catchAsync(async (req, res, next) => {
     query = Billing.find();
   }
 
-  const billings = await query.sort('-createdAt');
+ const billings = await query
+  .populate({
+    path: 'patient',
+    select: 'firstName lastName phone patientCardNumber' // Explicitly include
+  })
+  .sort('-createdAt');
+
 
   res.status(200).json({
     status: 'success',
@@ -42,8 +48,11 @@ exports.getAllBillings = catchAsync(async (req, res, next) => {
 // @route   GET /api/v1/billing/:id
 // @access  Private
 exports.getBilling = catchAsync(async (req, res, next) => {
-  const billing = await Billing.findById(req.params.id);
-
+  const billing = await Billing.findById(req.params.id)
+  .populate({
+    path: 'patient',
+    select: 'firstName lastName phone patientCardNumber'
+  });
   if (!billing) {
     return next(new AppError('No billing found with that ID', 404));
   }
@@ -56,6 +65,8 @@ exports.getBilling = catchAsync(async (req, res, next) => {
   ) {
     return next(new AppError('You are not authorized to view this billing', 403));
   }
+
+  
 
   res.status(200).json({
     status: 'success',
@@ -269,9 +280,12 @@ exports.getBillingsByPatient = catchAsync(async (req, res, next) => {
     );
   }
 
-  const billings = await Billing.find({ patient: req.params.patientId }).sort(
-    '-createdAt'
-  );
+ const billings = await Billing.find({ patient: req.params.patientId })
+  .populate({
+    path: 'patient',
+    select: 'firstName lastName phone patientCardNumber'
+  })
+  .sort('-createdAt');
 
   res.status(200).json({
     status: 'success',
@@ -291,15 +305,107 @@ exports.getBillingsByStatus = catchAsync(async (req, res, next) => {
     return next(new AppError('Invalid status specified', 400));
   }
 
-  const billings = await Billing.find({ status: req.params.status }).sort(
-    '-createdAt'
-  );
+const billings = await Billing.find({ status: req.params.status })
+  .populate({
+    path: 'patient',
+    select: 'firstName lastName phone patientCardNumber'
+  })
+  .sort('-createdAt');
 
   res.status(200).json({
     status: 'success',
     results: billings.length,
     data: {
       billings
+    }
+  });
+});
+
+// @desc    Create registration billing
+// @route   POST /api/billing/patient/:patientId/registration
+// @access  Private/Admin, Receptionist
+exports.createRegistrationBilling = catchAsync(async (req, res, next) => {
+  const patient = await Patient.findById(req.params.patientId);
+  if (!patient) {
+    return next(new AppError('No patient found with that ID', 404));
+  }
+
+  const billingData = {
+    patient: patient._id,
+    items: [{
+      description: 'Registration Fee',
+      quantity: 1,
+      unitPrice: 100,
+      total: 100
+    }],
+    subtotal: 100, // Add subtotal
+    total: 100,
+    status: 'pending',
+    paymentType: 'registration',
+    createdBy: req.user._id, // Add creator ID from authenticated user
+    createdByModel: capitalizeFirstLetter(req.user.role) // Add creator role
+  };
+
+  const billing = await Billing.create(billingData);
+  
+  // Log the action
+  await AuditLog.create({
+    action: 'create',
+    entity: 'billing',
+    entityId: billing._id,
+    user: req.user._id,
+    userModel: capitalizeFirstLetter(req.user.role),
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent')
+  });
+
+  res.status(201).json({
+    status: 'success',
+    data: {
+      billing
+    }
+  });
+});
+
+
+exports.getUnpaidBills = catchAsync(async (req, res, next) => {
+ const bills = await Billing.find({ status: { $ne: 'paid' } })
+  .populate({
+    path: 'patient',
+    select: 'firstName lastName phone patientCardNumber'
+  })
+  .populate({
+    path: 'relatedEntity',
+    select: 'code description',
+    options: { retainNullValues: true }
+  });
+
+  res.status(200).json({
+    status: 'success',
+    results: bills.length,
+    data: {
+      bills
+    }
+  });
+});
+
+exports.updateBillingStatus = catchAsync(async (req, res, next) => {
+  const { status } = req.body;
+  
+  const bill = await Billing.findByIdAndUpdate(
+    req.params.id,
+    { status },
+    { new: true, runValidators: true }
+  );
+
+  if (!bill) {
+    return next(new AppError('No billing record found with that ID', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      bill
     }
   });
 });

@@ -60,6 +60,12 @@ router.delete('/:patientId/doctor', patientController.unassignDoctorFromPatient)
   patientController.getAllVitalSigns
 );
 
+router.patch(
+  '/:id/payment-status',
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  patientController.updatePaymentStatus
+);
+
 router
   .route('/:id')
   .get(patientController.getPatient)

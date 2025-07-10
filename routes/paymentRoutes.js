@@ -29,6 +29,19 @@ router.get(
   paymentController.getTodaysPayments
 );
 
+router.get('/unpaid', 
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  paymentController.getUnpaidBills
+);
+router.patch('/:id/mark-paid',
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  paymentController.markBillAsPaid
+);
+
+router.patch('/:id/status',
+  authMiddleware.restrictTo('admin', 'receptionist'),
+  paymentController.updatePaymentStatus
+);
 
 router
   .route('/:id')
@@ -63,5 +76,10 @@ router
     authMiddleware.restrictTo('admin', 'receptionist'),
     paymentController.getPaymentsByBilling
   );
+
+router.get('/types', 
+ authMiddleware.restrictTo('admin', 'receptionist'),
+  paymentController.getPaymentTypes
+);
 
 module.exports = router;
